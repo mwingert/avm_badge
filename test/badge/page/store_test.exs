@@ -108,6 +108,55 @@ defmodule Badge.Page.StoreTest do
     assert key(state, {:edit, :newline}).entry.id == "demo"
   end
 
+  describe "category filter" do
+    defp shelves do
+      ready([
+        entry("snake", %{category: "games"}),
+        entry("paint", %{category: "art"}),
+        entry("pong", %{category: "games"})
+      ])
+    end
+
+    test "starts on All, with every app" do
+      state = shelves()
+      assert "< All >" in texts(state)
+      assert for(e <- Page.rows(state), do: e.id) == ["snake", "paint", "pong"]
+    end
+
+    test "right steps through the categories in manifest order, and wraps" do
+      state = key(shelves(), {:move, :right})
+      assert "< Games >" in texts(state)
+      assert for(e <- Page.rows(state), do: e.id) == ["snake", "pong"]
+
+      state = key(state, {:move, :right})
+      assert for(e <- Page.rows(state), do: e.id) == ["paint"]
+
+      assert "< All >" in texts(key(state, {:move, :right}))
+    end
+
+    test "left goes back, from All to the last category" do
+      state = key(shelves(), {:move, :left})
+      assert "< Art >" in texts(state)
+    end
+
+    test "a new filter puts the cursor on the first row" do
+      state = shelves() |> key({:move, :down}) |> key({:move, :right})
+      assert state.cursor == 0
+    end
+
+    test "installed apps the store no longer lists show under All only" do
+      Installed.set([entry("gone")])
+      state = shelves()
+
+      assert "gone" in for(e <- Page.rows(state), do: e.id)
+      refute "gone" in for(e <- Page.rows(key(state, {:move, :right})), do: e.id)
+    end
+
+    test "with no apps, left and right are left to the router" do
+      assert Page.handle_key({:move, :right}, ready([])) == :ignore
+    end
+  end
+
   test "a failed manifest shows the store offline" do
     state = Page.finished(%{Page.init() | want: nil}, {:manifest, {:error, :offline}})
     assert "Store offline" in texts(state)

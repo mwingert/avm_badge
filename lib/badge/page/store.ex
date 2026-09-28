@@ -27,7 +27,7 @@ defmodule Badge.Page.Store do
 
   @top Theme.content_top() + 4
   @pitch 20
-  @visible 8
+  @visible 7
   @hint_y Theme.height() - 20
   @notice_y Theme.height() - 44
   @columns 38
@@ -43,6 +43,7 @@ defmodule Badge.Page.Store do
     fresh = %{
       view: :list,
       cursor: 0,
+      filter: nil,
       entry: nil,
       entries: [],
       manifest: :loading,
@@ -69,7 +70,11 @@ defmodule Badge.Page.Store do
 
   @doc "What the list shows: the manifest's apps, then installed apps it no longer lists."
   @spec rows(map) :: [map]
-  def rows(%{entries: entries}), do: entries ++ delisted(Installed.all(), entries, [])
+  def rows(%{entries: entries, filter: nil}),
+    do: entries ++ delisted(Installed.all(), entries, [])
+
+  def rows(%{entries: entries, filter: filter}),
+    do: for(%{category: ^filter} = entry <- entries, do: entry)
 
   @doc "The status a list row shows for `entry`."
   @spec mark(map) :: binary
@@ -155,6 +160,18 @@ defmodule Badge.Page.Store do
     end
   end
 
+  # Left and right step the category filter: All, then each category in manifest order.
+  def handle_key({:move, direction}, %{view: :list, entries: entries, filter: filter} = state)
+      when direction == :left or direction == :right do
+    case categories(entries, []) do
+      [] ->
+        :ignore
+
+      categories ->
+        {:ok, %{state | filter: step([nil | categories], filter, direction), cursor: 0}}
+    end
+  end
+
   def handle_key({:edit, :newline}, %{view: :list, cursor: cursor} = state) do
     case rows(state) do
       [] ->
@@ -208,7 +225,7 @@ defmodule Badge.Page.Store do
     end
   end
 
-  defp list_items(%{cursor: cursor, notice: notice} = state) do
+  defp list_items(%{cursor: cursor, notice: notice, filter: filter} = state) do
     rows = rows(state)
     first = max(cursor - @visible + 1, 0)
 
@@ -218,7 +235,10 @@ defmodule Badge.Page.Store do
 
     free = "RAM " <> kb(Store.free(Installed.all())) <> " free"
 
-    Nav.rows(shown, cursor - first, @top, @pitch) ++
+    shelf = "< " <> shelf_name(filter) <> " >"
+
+    [{:text, Readout.centre_x(shelf), @top, FontType.body(), Theme.fg(), Theme.bg(), shelf}] ++
+      Nav.rows(shown, cursor - first, @top + @pitch, @pitch) ++
       list_status(state, rows) ++
       notice_items(notice) ++
       [{:text, Readout.right_x(free), @hint_y, FontType.body(), Theme.dim(), Theme.bg(), free}] ++
@@ -294,6 +314,31 @@ defmodule Badge.Page.Store do
   defp listed?([], _id), do: false
   defp listed?([%{id: id} | _rest], id), do: true
   defp listed?([_entry | rest], id), do: listed?(rest, id)
+
+  defp categories([], acc), do: :lists.reverse(acc)
+
+  defp categories([%{category: category} | rest], acc) do
+    case :lists.member(category, acc) do
+      true -> categories(rest, acc)
+      false -> categories(rest, [category | acc])
+    end
+  end
+
+  defp categories([_uncategorised | rest], acc), do: categories(rest, acc)
+
+  defp step(filters, current, :right), do: following(filters ++ [hd(filters)], current)
+
+  defp step(filters, current, :left) do
+    reversed = :lists.reverse(filters)
+    following(reversed ++ [hd(reversed)], current)
+  end
+
+  defp following([current, next | _rest], current), do: next
+  defp following([_other | rest], current), do: following(rest, current)
+  defp following([], _current), do: nil
+
+  defp shelf_name(nil), do: "All"
+  defp shelf_name(<<first, rest::binary>>), do: <<first - 32, rest::binary>>
 
   defp kb(bytes), do: :erlang.integer_to_binary(div(bytes + 1023, 1024)) <> "K"
 

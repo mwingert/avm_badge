@@ -3,7 +3,7 @@ defmodule Badge.Store do
   The app store's rules as plain data: what a manifest entry must hold, whether
   a downloaded pack is genuine, and how much of the RAM budget is left.
 
-  An entry is a map with `id`, `name`, `author`, `description`, `version`,
+  An entry is a map with `id`, `category`, `name`, `author`, `description`, `version`,
   `size`, `storage` (`"ram"` or `"flash"`), `api`, `sha256` (hex) and `sig`
   (base64 DER). A pack is genuine when its size and SHA-256 match the entry
   and `sig` is an ECDSA P-256 signature, by the key in `assets/store_key.pub`,
@@ -99,18 +99,20 @@ defmodule Badge.Store do
     end
   end
 
-  defp entry(%{
-         "id" => id,
-         "name" => name,
-         "author" => author,
-         "description" => description,
-         "version" => version,
-         "size" => size,
-         "storage" => storage,
-         "api" => api,
-         "sha256" => sha256,
-         "sig" => sig
-       })
+  defp entry(
+         %{
+           "id" => id,
+           "name" => name,
+           "author" => author,
+           "description" => description,
+           "version" => version,
+           "size" => size,
+           "storage" => storage,
+           "api" => api,
+           "sha256" => sha256,
+           "sig" => sig
+         } = raw
+       )
        when is_binary(name) and byte_size(name) <= 13 and is_binary(author) and
               byte_size(author) <= 32 and
               is_binary(description) and byte_size(description) <= 120 and is_binary(version) and
@@ -118,11 +120,14 @@ defmodule Badge.Store do
               is_integer(size) and size > 0 and is_integer(api) and is_binary(sha256) and
               byte_size(sha256) == 64 and
               is_binary(sig) and byte_size(sig) <= 96 and (storage == "ram" or storage == "flash") do
-    case valid_id?(id) do
+    category = Map.get(raw, "category", "other")
+
+    case valid_id?(id) and category?(category) do
       true ->
         {:ok,
          %{
            id: id,
+           category: category,
            name: name,
            author: author,
            description: description,
@@ -140,6 +145,16 @@ defmodule Badge.Store do
   end
 
   defp entry(_raw), do: :error
+
+  # One to twelve lowercase letters; the store repo keeps the list of those in use.
+  defp category?(<<c, _rest::binary>> = category)
+       when byte_size(category) <= 12 and c >= ?a and c <= ?z, do: letters?(category)
+
+  defp category?(_category), do: false
+
+  defp letters?(<<>>), do: true
+  defp letters?(<<c, rest::binary>>) when c >= ?a and c <= ?z, do: letters?(rest)
+  defp letters?(_rest), do: false
 
   @doc "Whether `pack` is the genuine pack for `entry`."
   @spec verify(map, binary, binary | nil) ::
