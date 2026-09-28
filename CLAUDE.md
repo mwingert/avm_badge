@@ -13,6 +13,9 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
   Host tests passing proves nothing
 - `mix atomvm.esp32.flash` — builds, checks, flashes. The port auto-detects;
   never pass `--port`
+- Mix tasks live in `mix/tasks`, not `lib/`: any `atomvm.*` task builds
+  without them, so they cost `main.avm` nothing. `atomvm.application_bin` is
+  an alias function in `mix.exs`
 - `iex -S mix` — the firmware on fake hardware, panel at
   http://localhost:3240. `mix sim.check` renders every page once, headless
 - Two mix targets: `:host` is the simulator (`sim/lib` plus

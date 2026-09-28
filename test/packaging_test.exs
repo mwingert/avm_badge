@@ -26,6 +26,11 @@ defmodule PackagingTest do
 
   @root Path.expand("..", __DIR__)
 
+  test "mix tasks live outside lib, so the firmware image leaves them out" do
+    refute File.dir?(Path.join(@root, "lib/mix"))
+    assert File.regular?(Path.join(@root, "mix/tasks/badge.base.ex"))
+  end
+
   test "every generated font is one the firmware actually loads" do
     generated =
       Path.wildcard(Path.join(@root, "assets/fonts/*.uf"))
