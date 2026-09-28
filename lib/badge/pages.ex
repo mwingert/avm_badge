@@ -27,7 +27,8 @@ defmodule Badge.Pages do
     Badge.Page.Agent,
     Badge.Page.Cluster,
     Badge.Page.About,
-    Badge.Page.Schedule
+    Badge.Page.Schedule,
+    Badge.Page.Store
   ]
 
   @per_screen length(@keys)

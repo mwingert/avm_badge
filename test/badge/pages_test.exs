@@ -66,8 +66,9 @@ defmodule Badge.PagesTest do
       assert Pages.for_key(:triangle, 1) == Badge.Page.Agent
     end
 
-    test "an empty slot is nil, not a crash" do
-      assert Pages.for_key(:diamond, 1) == nil
+    test "the store closes the second screen, and an empty slot is nil" do
+      assert Pages.for_key(:diamond, 1) == Badge.Page.Store
+      assert Pages.for_key(:square, 2) == nil
       assert Pages.for_key(:square, 99) == nil
     end
   end
@@ -113,7 +114,19 @@ defmodule Badge.PagesTest do
 
   describe "installed apps" do
     setup do
-      Badge.Store.Installed.set([%{id: "demo", name: "Demo", version: "1.0.0", size: 10, storage: "ram", api: 1, sha256: "", sig: ""}])
+      Badge.Store.Installed.set([
+        %{
+          id: "demo",
+          name: "Demo",
+          version: "1.0.0",
+          size: 10,
+          storage: "ram",
+          api: 1,
+          sha256: "",
+          sig: ""
+        }
+      ])
+
       :ok
     end
 

@@ -47,14 +47,14 @@ defmodule Badge.Store.Installed do
 
   @doc "The installed apps' page modules."
   @spec pages() :: [module]
-  def pages, do: for(entry <- all(), do: entry.page)
+  def pages, do: for(%{page: page} <- all(), do: page)
 
   @doc "The manifest name of the app whose page is `module`, or nil."
   @spec name(module) :: binary | nil
   def name(module) do
     case entry_for(module) do
       nil -> nil
-      entry -> entry.name
+      %{name: name} -> name
     end
   end
 
@@ -76,7 +76,7 @@ defmodule Badge.Store.Installed do
 
   @doc "`entries` without app `id`."
   @spec drop([map], binary) :: [map]
-  def drop(entries, id), do: for(entry <- entries, entry.id != id, do: entry)
+  def drop(entries, id), do: for(%{id: other} = entry <- entries, other != id, do: entry)
 
   @doc "Installs or updates `entry` in this process and in NVS."
   @spec put(map) :: :ok | {:error, term}
@@ -116,20 +116,29 @@ defmodule Badge.Store.Installed do
     end
   end
 
-  defp stored(entry) do
+  defp stored(%{
+         id: id,
+         name: name,
+         version: version,
+         size: size,
+         storage: storage,
+         api: api,
+         sha256: sha256,
+         sig: sig
+       }) do
     %{
-      id: entry.id,
-      name: entry.name,
-      version: entry.version,
-      size: entry.size,
-      storage: entry.storage,
-      api: entry.api,
-      sha256: entry.sha256,
-      sig: entry.sig
+      id: id,
+      name: name,
+      version: version,
+      size: size,
+      storage: storage,
+      api: api,
+      sha256: sha256,
+      sig: sig
     }
   end
 
-  defp with_page(entry), do: Map.put(stored(entry), :page, Store.page_module(entry.id))
+  defp with_page(%{id: id} = entry), do: Map.put(stored(entry), :page, Store.page_module(id))
 
   defp replace([], entry, acc), do: :lists.reverse([entry | acc])
 
