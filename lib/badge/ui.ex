@@ -27,6 +27,10 @@ defmodule Badge.UI do
 
   The saved `Badge.Skin` is activated here, because pages render inside this
   process and read their colours from its dictionary.
+
+  Every call into a page goes through `Badge.UI.Guard`: a page that raises or
+  exits is logged and replaced by Home. An installed app whose code is not
+  loaded yet opens the Store page, which downloads it first.
   """
 
   use GenServer
@@ -39,12 +43,15 @@ defmodule Badge.UI do
   alias Badge.Keyboard
   alias Badge.Page.Home
   alias Badge.Page.Splash
+  alias Badge.Page.Store, as: StorePage
   alias Badge.Pages
   alias Badge.Pixels
   alias Badge.Power
   alias Badge.Skin
   alias Badge.Sleep
+  alias Badge.Store.Installed
   alias Badge.Theme
+  alias Badge.UI.Guard
   alias Badge.Update
   alias Badge.Wifi
 
@@ -112,6 +119,7 @@ defmodule Badge.UI do
 
   @impl true
   def init(display) do
+    Installed.load()
     page = first_page()
 
     state = %{
@@ -132,7 +140,7 @@ defmodule Badge.UI do
     Skin.activate(Skin.load())
 
     # Renders once immediately so the home grid is up before the first tick.
-    render(state)
+    state = render(state)
 
     start_ticker()
 
@@ -166,67 +174,66 @@ defmodule Badge.UI do
   def handle_cast({:key, {:nav, key}}, state) do
     state = %{state | idle: 0}
 
-    case state.page.handle_key({:nav, key}, state.page_state) do
-      {:ok, page_state} ->
-        dirty = state.dirty or page_state != state.page_state
-
-        {:noreply, %{state | page_state: page_state, dirty: dirty}}
-
-      :ignore ->
-        {:noreply, navigate(key, state)}
+    case offer(state, :handle_key, [{:nav, key}]) do
+      {:took, state} -> {:noreply, state}
+      :ignore -> {:noreply, navigate(key, state)}
     end
   end
 
   def handle_cast({:key, event}, state) do
     state = %{state | idle: 0}
 
-    case state.page.handle_key(event, state.page_state) do
-      {:ok, page_state} ->
-        dirty = state.dirty or page_state != state.page_state
-
-        {:noreply, %{state | page_state: page_state, dirty: dirty}}
-
-      :ignore ->
-        {:noreply, state}
+    case offer(state, :handle_key, [event]) do
+      {:took, state} -> {:noreply, state}
+      :ignore -> {:noreply, state}
     end
   end
 
   # A page that is finished with the screen hands over by returning `{:goto, page}`.
   @impl true
   def handle_info(:render_tick, state) do
-    case state.page.tick(state.page_state) do
-      {:goto, page} -> {:noreply, goto(state, page)}
-      page_state -> {:noreply, ticked(state, page_state)}
+    case Guard.call(state.page, :tick, [state.page_state]) do
+      {:ok, {:goto, page}} -> {:noreply, goto(state, page)}
+      {:ok, page_state} -> {:noreply, ticked(state, page_state)}
+      :crashed -> {:noreply, crashed(state)}
     end
   end
 
   # The IR link delivers here because this process owns the mailbox; only the
   # page on screen is offered the frame.
   def handle_info({:ir, from, payload}, state) do
-    case state.page.handle_ir(from, payload, state.page_state) do
-      {:ok, page_state} ->
-        dirty = state.dirty or page_state != state.page_state
-
-        {:noreply, %{state | page_state: page_state, dirty: dirty}}
-
-      :ignore ->
-        {:noreply, state}
+    case offer(state, :handle_ir, [from, payload]) do
+      {:took, state} -> {:noreply, state}
+      :ignore -> {:noreply, state}
     end
   end
 
   # A page's own process can only send to this GenServer, which owns the
   # mailbox; anything it does not recognise is dropped rather than fatal.
   def handle_info(message, state) do
-    case state.page.handle_info(message, state.page_state) do
-      {:ok, page_state} ->
-        dirty = state.dirty or page_state != state.page_state
-
-        {:noreply, %{state | page_state: page_state, dirty: dirty}}
-
-      :ignore ->
-        {:noreply, state}
+    case offer(state, :handle_info, [message]) do
+      {:took, state} -> {:noreply, state}
+      :ignore -> {:noreply, state}
     end
   end
+
+  # Offers an event to the page on screen; a crash or an unexpected answer puts Home there instead.
+  defp offer(state, fun, args) do
+    case Guard.call(state.page, fun, args ++ [state.page_state]) do
+      {:ok, {:ok, page_state}} ->
+        {:took,
+         %{state | page_state: page_state, dirty: state.dirty or page_state != state.page_state}}
+
+      {:ok, :ignore} ->
+        :ignore
+
+      _crashed ->
+        {:took, crashed(state)}
+    end
+  end
+
+  defp crashed(state),
+    do: %{state | page: Home, page_state: Home.init(), dirty: true, countdown: 0}
 
   defp ticked(state, page_state) do
     {status, status_countdown} = refresh_status(state)
@@ -245,8 +252,7 @@ defmodule Badge.UI do
     # Nothing is visible while asleep, and a repaint is the costliest thing here.
     case not next.asleep and dirty and next.countdown <= 0 do
       true ->
-        drawn = sync_fonts(next)
-        render(drawn)
+        drawn = render(sync_fonts(next))
 
         %{drawn | dirty: false, countdown: reload(drawn.page, drawn.page_state)}
 
@@ -323,7 +329,11 @@ defmodule Badge.UI do
   # Fonts are settled before the frame, never from a page, because a page runs
   # inside this process and a message to itself would arrive after the draw.
   defp sync_fonts(state) do
-    wanted = state.page.fonts(state.page_state)
+    wanted =
+      case Guard.call(state.page, :fonts, [state.page_state]) do
+        {:ok, fonts} -> fonts
+        :crashed -> []
+      end
 
     state
     |> free_fonts(state.fonts -- wanted)
@@ -361,7 +371,12 @@ defmodule Badge.UI do
     _, _ -> nil
   end
 
-  defp reload(page, page_state), do: max(div(page.refresh(page_state), @base_interval), 1) - 1
+  defp reload(page, page_state) do
+    case Guard.call(page, :refresh, [page_state]) do
+      {:ok, ms} -> max(div(ms, @base_interval), 1) - 1
+      :crashed -> 0
+    end
+  end
 
   # Retries next tick while a source is down, rather than calling a process that is not there.
   defp refresh_status(%{status_countdown: 0} = state) do
@@ -414,15 +429,53 @@ defmodule Badge.UI do
   defp goto(%{page: page} = state, page), do: state
 
   defp goto(state, page) do
-    state.page.leave(state.page_state)
+    Guard.call(state.page, :leave, [state.page_state])
+    page = route(page)
 
-    %{state | page: page, page_state: page.init(), dirty: true, countdown: 0}
+    case Guard.call(page, :init, []) do
+      {:ok, page_state} ->
+        %{state | page: page, page_state: page_state, dirty: true, countdown: 0}
+
+      :crashed ->
+        crashed(state)
+    end
   end
 
-  defp render(%{display: display, page: page, page_state: page_state, status: status}) do
-    items = page.render(page_state) ++ Theme.chrome(page.title(), status)
+  # An installed app opens once its code is loaded; until then the Store page fetches it.
+  defp route(page) do
+    case Installed.entry_for(page) do
+      nil -> page
+      %{id: id} -> app_route(page, id)
+    end
+  end
 
-    :ok = Display.update(display, items)
+  defp app_route(page, id) do
+    cond do
+      Installed.disabled?(id) ->
+        Home
+
+      Installed.loaded?(id) ->
+        page
+
+      true ->
+        :erlang.put(:store_fetch, id)
+        StorePage
+    end
+  end
+
+  # Returns the state, which is Home's if the page crashed while drawing.
+  defp render(state) do
+    with {:ok, items} <- Guard.call(state.page, :render, [state.page_state]),
+         {:ok, title} <- Guard.call(state.page, :title, []) do
+      :ok = Display.update(state.display, items ++ Theme.chrome(title, state.status))
+      state
+    else
+      :crashed ->
+        case state.page == Home do
+          true -> state
+          false -> render(crashed(state))
+        end
+    end
   end
 
   # Waits in a linked process, so this GenServer never sleeps in a callback and a dead ticker crashes loudly.
