@@ -69,11 +69,10 @@ defmodule Badge.Store do
 
   @doc "What the store key signs for an entry whose pack hashes to `sha_hex`."
   @spec signed_message(map, binary) :: binary
-  def signed_message(entry, sha_hex) do
-    entry.id <>
+  def signed_message(%{id: id, version: version, api: api, storage: storage}, sha_hex) do
+    id <>
       "\n" <>
-      entry.version <>
-      "\n" <> :erlang.integer_to_binary(entry.api) <> "\n" <> entry.storage <> "\n" <> sha_hex
+      version <> "\n" <> :erlang.integer_to_binary(api) <> "\n" <> storage <> "\n" <> sha_hex
   end
 
   @doc "The manifest's well-formed entries; a malformed one is logged and dropped."
@@ -145,14 +144,18 @@ defmodule Badge.Store do
   @doc "Whether `pack` is the genuine pack for `entry`."
   @spec verify(map, binary, binary | nil) ::
           :ok | {:error, :size | :sha256 | :api | :storage | :signature}
-  def verify(entry, pack, key \\ @public_key) do
+  def verify(
+        %{size: size, sha256: sha256, api: api, storage: storage} = entry,
+        pack,
+        key \\ @public_key
+      ) do
     sha = hex(:crypto.hash(:sha256, pack))
 
     cond do
-      byte_size(pack) != entry.size -> {:error, :size}
-      sha != entry.sha256 -> {:error, :sha256}
-      entry.api != @api -> {:error, :api}
-      entry.storage != "ram" -> {:error, :storage}
+      byte_size(pack) != size -> {:error, :size}
+      sha != sha256 -> {:error, :sha256}
+      api != @api -> {:error, :api}
+      storage != "ram" -> {:error, :storage}
       not signed?(entry, sha, key) -> {:error, :signature}
       true -> :ok
     end
@@ -160,8 +163,8 @@ defmodule Badge.Store do
 
   defp signed?(_entry, _sha, nil), do: false
 
-  defp signed?(entry, sha, key) do
-    :crypto.verify(:ecdsa, :sha256, signed_message(entry, sha), :base64.decode(entry.sig), [
+  defp signed?(%{sig: sig} = entry, sha, key) do
+    :crypto.verify(:ecdsa, :sha256, signed_message(entry, sha), :base64.decode(sig), [
       key,
       :secp256r1
     ])
@@ -180,16 +183,16 @@ defmodule Badge.Store do
   @doc "What installing `entry` would mean, given what is installed."
   @spec installable(map, [map]) ::
           :ok | :installed | :update | {:no, :api | :storage | :space | :full}
-  def installable(entry, installed) do
-    current = find(installed, entry.id)
+  def installable(%{id: id, version: version, size: size, api: api, storage: storage}, installed) do
+    current = find(installed, id)
 
     cond do
-      entry.api != @api -> {:no, :api}
-      entry.storage != "ram" -> {:no, :storage}
-      current != nil and current.version == entry.version -> :installed
+      api != @api -> {:no, :api}
+      storage != "ram" -> {:no, :storage}
+      current != nil and version_of(current) == version -> :installed
       current == nil and length(installed) >= @max_apps -> {:no, :full}
-      entry.size > @max_pack -> {:no, :space}
-      entry.size - size_of(current) > free(installed) -> {:no, :space}
+      size > @max_pack -> {:no, :space}
+      size - size_of(current) > free(installed) -> {:no, :space}
       current != nil -> :update
       true -> :ok
     end
@@ -200,7 +203,9 @@ defmodule Badge.Store do
   defp find([_entry | rest], id), do: find(rest, id)
 
   defp size_of(nil), do: 0
-  defp size_of(entry), do: entry.size
+  defp size_of(%{size: size}), do: size
+
+  defp version_of(%{version: version}), do: version
 
   @doc "The store's base URL: the provisioned `store_url`, or the public store."
   @spec base(binary | nil) :: binary
@@ -233,5 +238,5 @@ defmodule Badge.Store do
 
   @doc "Where an entry's pack sits under the base URL."
   @spec pack_path(map) :: binary
-  def pack_path(entry), do: "packs/" <> entry.id <> "-" <> entry.version <> ".avm"
+  def pack_path(%{id: id, version: version}), do: "packs/" <> id <> "-" <> version <> ".avm"
 end
