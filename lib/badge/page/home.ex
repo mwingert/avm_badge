@@ -117,7 +117,7 @@ defmodule Badge.Page.Home do
   end
 
   defp cell_items([{key, module} | slots], [{x, y} | origins], acc) do
-    label = module.title()
+    label = Pages.label(module)
 
     {icon_w, _icon_h} = Icons.size(key)
     icon = Icons.item(key, x + div(@cell_w - icon_w, 2), y + @icon_dy)

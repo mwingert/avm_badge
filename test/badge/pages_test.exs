@@ -148,4 +148,21 @@ defmodule Badge.PagesTest do
       assert Badge.Page.Home.handle_key({:nav, :home}, Badge.Page.Home.init()) == :ignore
     end
   end
+
+  describe "installed apps" do
+    setup do
+      Badge.Store.Installed.set([%{id: "demo", name: "Demo", version: "1.0.0", size: 10, storage: "ram", api: 1, sha256: "", sig: ""}])
+      :ok
+    end
+
+    test "follow the firmware pages" do
+      assert List.last(Pages.all()) == Badge.App.Demo.Page
+      assert Pages.screens() == div(length(Pages.all()) + 5, 6)
+    end
+
+    test "are labelled with their manifest name, firmware pages with their title" do
+      assert Pages.label(Badge.App.Demo.Page) == "Demo"
+      assert Pages.label(Badge.Page.Chat) == "Chat"
+    end
+  end
 end
