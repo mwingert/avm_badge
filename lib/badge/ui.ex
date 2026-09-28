@@ -231,8 +231,11 @@ defmodule Badge.UI do
     end
   end
 
-  defp crashed(state),
-    do: %{state | page: Home, page_state: Home.init(), dirty: true, countdown: 0}
+  @doc "The state after the page on screen crashed: it is left, so it can release what it holds, and Home takes its place."
+  def crashed(%{page: page, page_state: page_state} = state) do
+    Guard.call(page, :leave, [page_state])
+    %{state | page: Home, page_state: Home.init(), dirty: true, countdown: 0}
+  end
 
   defp ticked(state, page_state) do
     {status, status_countdown} = refresh_status(state)
@@ -427,9 +430,23 @@ defmodule Badge.UI do
   # Re-entering the current page would reset it, and key repeat fires a held key 8 times a second.
   defp goto(%{page: page} = state, page), do: state
 
-  defp goto(%{page: current, page_state: page_state} = state, page) do
+  # A crashed app stays shut; an app whose code is not loaded opens the Store page, which fetches it.
+  defp goto(state, page) do
+    case Installed.route(page) do
+      :disabled ->
+        state
+
+      {:fetch, id} ->
+        :erlang.put(:store_fetch, id)
+        open(state, StorePage)
+
+      page ->
+        open(state, page)
+    end
+  end
+
+  defp open(%{page: current, page_state: page_state} = state, page) do
     Guard.call(current, :leave, [page_state])
-    page = route(page)
 
     case Guard.call(page, :init, []) do
       {:ok, page_state} ->
@@ -437,28 +454,6 @@ defmodule Badge.UI do
 
       :crashed ->
         crashed(state)
-    end
-  end
-
-  # An installed app opens once its code is loaded; until then the Store page fetches it.
-  defp route(page) do
-    case Installed.entry_for(page) do
-      nil -> page
-      %{id: id} -> app_route(page, id)
-    end
-  end
-
-  defp app_route(page, id) do
-    cond do
-      Installed.disabled?(id) ->
-        Home
-
-      Installed.loaded?(id) ->
-        page
-
-      true ->
-        :erlang.put(:store_fetch, id)
-        StorePage
     end
   end
 

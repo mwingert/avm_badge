@@ -18,12 +18,20 @@ defmodule Badge.Store.Job do
   alias Badge.Wifi
 
   @max_manifest 32_768
+  @timeout 60_000
 
-  @doc "Runs `kind` in a new process that answers the caller with `{ref, result}`."
-  @spec start(:manifest | {:pack, map}, reference) :: pid
-  def start(kind, ref) do
+  @doc """
+  Runs `kind` in a new process that answers the caller with `{ref, result}`.
+
+  A job that raises answers as a failure; one still running after `timeout`
+  ms is killed and answers `:timeout`. Returns the worker's pid.
+  """
+  @spec start(:manifest | {:pack, map}, reference, pos_integer) :: pid
+  def start(kind, ref, timeout \\ @timeout) do
     owner = self()
-    spawn(fn -> send(owner, {ref, run(kind)}) end)
+    worker = spawn(fn -> send(owner, {ref, answer(kind)}) end)
+    spawn(fn -> give_up(worker, owner, ref, kind, timeout) end)
+    worker
   end
 
   @doc "Does the work of one job in the calling process."
@@ -58,6 +66,28 @@ defmodule Badge.Store.Job do
         {:failed, entry, reason}
     end
   end
+
+  defp answer(kind) do
+    run(kind)
+  catch
+    class, reason -> failure(kind, {:error, {class, reason}})
+  end
+
+  defp give_up(worker, owner, ref, kind, timeout) do
+    Process.sleep(timeout)
+
+    case Process.alive?(worker) do
+      true ->
+        Process.exit(worker, :kill)
+        send(owner, {ref, failure(kind, :timeout)})
+
+      false ->
+        :ok
+    end
+  end
+
+  defp failure(:manifest, reason), do: {:manifest, {:error, reason}}
+  defp failure({:pack, entry}, reason), do: {:failed, entry, reason}
 
   # HTTPS needs a set clock; before SNTP every certificate is "not yet valid".
   defp online do

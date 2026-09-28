@@ -58,6 +58,27 @@ defmodule Badge.Store.Installed do
     end
   end
 
+  @doc """
+  What opening `page` means: the page itself, `{:fetch, id}` for an app whose
+  code is not loaded yet, or `:disabled` for an app that crashed this boot.
+  """
+  @spec route(module) :: module | {:fetch, binary} | :disabled
+  def route(page) do
+    case entry_for(page) do
+      nil -> page
+      %{id: id} -> app_route(page, id)
+    end
+  end
+
+  @doc "Whether `page` belongs to an app that crashed this boot."
+  @spec disabled_page?(module) :: boolean
+  def disabled_page?(page) do
+    case entry_for(page) do
+      nil -> false
+      %{id: id} -> disabled?(id)
+    end
+  end
+
   @doc "Whether app `id`'s code was loaded this boot."
   def loaded?(id), do: :lists.member(id, get(@loaded))
 
@@ -101,6 +122,14 @@ defmodule Badge.Store.Installed do
     end
   catch
     _kind, _reason -> []
+  end
+
+  defp app_route(page, id) do
+    cond do
+      disabled?(id) -> :disabled
+      loaded?(id) -> page
+      true -> {:fetch, id}
+    end
   end
 
   defp save(entries) do

@@ -97,6 +97,17 @@ defmodule Badge.Page.StoreTest do
     assert key(state, {:char, ?r}).want == {:remove, "gone"}
   end
 
+  test "back in the list after a removal, the cursor stays on a row" do
+    Installed.set([entry("gone")])
+    state = ready([entry("demo")]) |> key({:move, :down}) |> key({:edit, :newline})
+
+    Installed.set([])
+    state = key(state, {:nav, :home})
+
+    assert state.cursor == 0
+    assert key(state, {:edit, :newline}).entry.id == "demo"
+  end
+
   test "a failed manifest shows the store offline" do
     state = Page.finished(%{Page.init() | want: nil}, {:manifest, {:error, :offline}})
     assert "Store offline" in texts(state)

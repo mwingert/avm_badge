@@ -93,7 +93,8 @@ defmodule Badge.StoreTest do
     test "drops malformed entries and keeps the rest" do
       bad = [
         raw(%{"id" => "Bad"}),
-        raw(%{"name" => String.duplicate("n", 17)}),
+        raw(%{"name" => String.duplicate("n", 14)}),
+        raw(%{"sig" => String.duplicate("s", 97)}),
         raw(%{"author" => String.duplicate("a", 33)}),
         raw(%{"description" => String.duplicate("d", 121)}),
         raw(%{"storage" => "disk"}),
