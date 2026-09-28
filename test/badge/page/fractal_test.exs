@@ -1,6 +1,7 @@
 defmodule Badge.Page.FractalTest do
   use ExUnit.Case, async: true
 
+  alias Badge.Fractal.Palette
   alias Badge.Page.Fractal
 
   defp keys(state, events) do
@@ -14,7 +15,14 @@ defmodule Badge.Page.FractalTest do
     )
   end
 
-  defp open(events \\ []), do: keys(Fractal.init(), events ++ [{:edit, :newline}])
+  # Loaded and saved, so tick/1 never reaches NVS.
+  defp ready, do: %{Fractal.init() | loaded: true, saved: Palette.default()}
+
+  defp open(events \\ []), do: keys(ready(), events ++ [{:edit, :newline}])
+
+  defp texts(state), do: for({:text, _x, _y, _font, _fg, _bg, text} <- Fractal.render(state), do: text)
+
+  defp rect_colours(state), do: for({:rect, _x, _y, _w, _h, colour} <- Fractal.render(state), do: colour)
 
   test "opens on the list" do
     state = Fractal.init()
@@ -52,6 +60,59 @@ defmodule Badge.Page.FractalTest do
 
     assert state.view.depth == 1
     assert state.stale
+  end
+
+  describe "tabs" do
+    test "right opens Settings and left comes back" do
+      state = keys(ready(), [{:move, :right}])
+
+      assert state.tab == 1
+      assert "Palette" in texts(state)
+      assert keys(state, [{:move, :left}]).tab == 0
+    end
+
+    test "both tab titles show on either tab" do
+      assert "Fractals" in texts(ready())
+      assert "Settings" in texts(ready())
+    end
+  end
+
+  describe "palette setting" do
+    test "Enter edits, arrows step the palette and stop at the ends, Enter finishes" do
+      state = keys(ready(), [{:move, :right}, {:edit, :newline}, {:move, :right}])
+
+      assert state.editing
+      assert state.palette == "Fire"
+      assert "Fire" in texts(state)
+
+      state = keys(state, [{:move, :left}, {:move, :left}, {:edit, :newline}])
+      assert state.palette == "Rainbow"
+      refute state.editing
+    end
+
+    test "Esc while editing only stops editing" do
+      state = keys(ready(), [{:move, :right}, {:edit, :newline}])
+
+      assert {:ok, %{editing: false, tab: 1}} = Fractal.handle_key({:nav, :home}, state)
+    end
+
+    test "Esc at rest is left to the router" do
+      assert Fractal.handle_key({:nav, :home}, keys(ready(), [{:move, :right}])) == :ignore
+    end
+
+    test "the preview draws the palette's frame and grid colours" do
+      state = keys(ready(), [{:move, :right}, {:edit, :newline}, {:move, :right}, {:move, :right}])
+
+      assert Palette.frame("Ocean") in rect_colours(state)
+      assert Palette.grid("Ocean") in rect_colours(state)
+    end
+
+    test "the fractal view draws the frame and grid in the palette's colours" do
+      state = open() |> Map.put(:palette, "Mono")
+
+      assert Palette.frame("Mono") in rect_colours(state)
+      assert Palette.grid("Mono") in rect_colours(state)
+    end
   end
 
   test "tick starts a render and handle_info takes its image" do

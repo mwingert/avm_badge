@@ -24,26 +24,6 @@ defmodule Badge.Fractal do
   @julia_re round(-0.8 * @one)
   @julia_im round(0.156 * @one)
 
-  # 16 hues around the colour wheel, one per escape count modulo 16, then black for inside.
-  @palette (for i <- 0..15 do
-              h = i / 16 * 6
-              x = round(255 * (1 - abs(:math.fmod(h, 2) - 1)))
-
-              {r, g, b} =
-                case trunc(h) do
-                  0 -> {255, x, 0}
-                  1 -> {x, 255, 0}
-                  2 -> {0, 255, x}
-                  3 -> {0, x, 255}
-                  4 -> {x, 0, 255}
-                  _ -> {255, 0, x}
-                end
-
-              <<r, g, b, 255>>
-            end)
-           |> Kernel.++([<<0, 0, 0, 255>>])
-           |> List.to_tuple()
-
   @doc "Every fractal kind, in list order."
   def kinds, do: @kinds
 
@@ -83,8 +63,8 @@ defmodule Badge.Fractal do
   @doc "Steps before the point `x + yi` leaves radius 2, or `max` if it never does."
   def escape(kind, x, y, max), do: point(kind, fixed(x), fixed(y), max)
 
-  @doc "Renders a view as `{:rgba8888, width, height, pixels}`."
-  def image(%{kind: kind, cx: cx, cy: cy, span: span, depth: depth}) do
+  @doc "Renders a view in `colours`, a `Badge.Fractal.Palette.colours/1` tuple, as `{:rgba8888, width, height, pixels}`."
+  def image(%{kind: kind, cx: cx, cy: cy, span: span, depth: depth}, colours) do
     step = span / @width
     left = cx - span / 2 + step / 2
     top = cy + step * @height / 2 - step / 2
@@ -92,9 +72,7 @@ defmodule Badge.Fractal do
 
     # One float conversion per column and per row.
     xs = for col <- :lists.seq(0, @width - 1), do: fixed(left + col * step)
-    # Bound once per frame; AtomVM rebuilds a module literal on each access.
-    palette = @palette
-    rows = for row <- :lists.seq(0, @height - 1), do: row(kind, xs, fixed(top - row * step), max, palette)
+    rows = for row <- :lists.seq(0, @height - 1), do: row(kind, xs, fixed(top - row * step), max, colours)
 
     {:rgba8888, @width, @height, :erlang.list_to_binary(rows)}
   end

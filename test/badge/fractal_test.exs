@@ -2,6 +2,7 @@ defmodule Badge.FractalTest do
   use ExUnit.Case, async: true
 
   alias Badge.Fractal
+  alias Badge.Fractal.Palette
 
   describe "escape/4" do
     test "the origin never escapes the Mandelbrot set" do
@@ -39,9 +40,9 @@ defmodule Badge.FractalTest do
     end
   end
 
-  describe "image/1" do
+  describe "image/2" do
     test "is an rgba8888 image of the render size" do
-      {:rgba8888, w, h, pixels} = Fractal.image(Fractal.view(:julia))
+      {:rgba8888, w, h, pixels} = Fractal.image(Fractal.view(:julia), Palette.colours("Fire"))
 
       assert {w, h} == {Fractal.width(), Fractal.height()}
       assert byte_size(pixels) == w * h * 4
