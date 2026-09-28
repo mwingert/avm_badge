@@ -90,11 +90,23 @@ defmodule Badge.StoreTest do
       assert app.storage == "ram"
     end
 
+    test "reads the category, and counts a missing one as other" do
+      assert {:ok, [art, plain]} =
+               Store.decode_manifest(
+                 manifest([raw(%{"category" => "art"}), raw(%{"id" => "plain"})])
+               )
+
+      assert art.category == "art"
+      assert plain.category == "other"
+    end
+
     test "drops malformed entries and keeps the rest" do
       bad = [
         raw(%{"id" => "Bad"}),
         raw(%{"name" => String.duplicate("n", 14)}),
         raw(%{"sig" => String.duplicate("s", 97)}),
+        raw(%{"category" => "Games"}),
+        raw(%{"category" => String.duplicate("c", 13)}),
         raw(%{"author" => String.duplicate("a", 33)}),
         raw(%{"description" => String.duplicate("d", 121)}),
         raw(%{"storage" => "disk"}),
