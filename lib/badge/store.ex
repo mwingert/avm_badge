@@ -111,13 +111,13 @@ defmodule Badge.Store do
          "sha256" => sha256,
          "sig" => sig
        })
-       when is_binary(name) and byte_size(name) <= 16 and is_binary(author) and
+       when is_binary(name) and byte_size(name) <= 13 and is_binary(author) and
               byte_size(author) <= 32 and
               is_binary(description) and byte_size(description) <= 120 and is_binary(version) and
               byte_size(version) <= 16 and
               is_integer(size) and size > 0 and is_integer(api) and is_binary(sha256) and
               byte_size(sha256) == 64 and
-              is_binary(sig) and (storage == "ram" or storage == "flash") do
+              is_binary(sig) and byte_size(sig) <= 96 and (storage == "ram" or storage == "flash") do
     case valid_id?(id) do
       true ->
         {:ok,

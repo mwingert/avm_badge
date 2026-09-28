@@ -30,6 +30,12 @@ defmodule Badge.Store.JobTest do
     assert log =~ "Store: demo failed: offline"
   end
 
+  test "a job that raises still answers" do
+    ref = make_ref()
+    Job.start({:pack, %{}}, ref)
+    assert_receive {^ref, {:failed, %{}, {:error, _reason}}}, 1_000
+  end
+
   test "start/2 answers the caller once, tagged with the ref" do
     ref = make_ref()
     Job.start(:manifest, ref)

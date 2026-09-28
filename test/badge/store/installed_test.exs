@@ -85,4 +85,17 @@ defmodule Badge.Store.InstalledTest do
     Installed.disable("demo")
     assert Installed.disabled?("demo")
   end
+
+  test "route/1 opens pages, fetches unloaded apps and refuses disabled ones" do
+    Installed.set([entry("demo")])
+
+    assert Installed.route(Badge.Page.Chat) == Badge.Page.Chat
+    assert Installed.route(Badge.App.Demo.Page) == {:fetch, "demo"}
+
+    Installed.mark_loaded("demo")
+    assert Installed.route(Badge.App.Demo.Page) == Badge.App.Demo.Page
+
+    Installed.disable("demo")
+    assert Installed.route(Badge.App.Demo.Page) == :disabled
+  end
 end

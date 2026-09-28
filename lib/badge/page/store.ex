@@ -165,8 +165,11 @@ defmodule Badge.Page.Store do
     end
   end
 
-  def handle_key({:nav, :home}, %{view: :detail} = state),
-    do: {:ok, %{state | view: :list, notice: nil}}
+  # A removal in the details may have shortened the list under the cursor.
+  def handle_key({:nav, :home}, %{view: :detail, cursor: cursor} = state) do
+    {:ok,
+     %{state | view: :list, notice: nil, cursor: max(min(cursor, length(rows(state)) - 1), 0)}}
+  end
 
   def handle_key({:edit, :newline}, %{view: :detail, restart: true} = state),
     do: {:ok, %{state | want: :restart}}
