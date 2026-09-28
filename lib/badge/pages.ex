@@ -7,7 +7,12 @@ defmodule Badge.Pages do
   their key; the later ones need the home grid turned to their screen first,
   where the same six keys open them. A slot may be `nil`: its button does
   nothing and its cell stays empty.
+
+  Installed apps from the store follow the firmware pages, so the screen count
+  is worked out at runtime.
   """
+
+  alias Badge.Store.Installed
 
   @keys [:square, :triangle, :cross, :circle, :clover, :diamond]
 
@@ -26,19 +31,27 @@ defmodule Badge.Pages do
   ]
 
   @per_screen length(@keys)
-  @screens div(length(@pages) + @per_screen - 1, @per_screen)
 
-  @doc "Every page, in grid order."
-  def all, do: @pages
+  @doc "Every page, in grid order: the firmware's, then installed apps."
+  def all, do: @pages ++ Installed.pages()
+
+  @doc "How many screens of six the grid needs."
+  def screens, do: div(length(all()) + @per_screen - 1, @per_screen)
+
+  @doc "One screen as `{key, module}` pairs, one per key, `nil` where the slot is empty."
+  def screen(n), do: pair(@keys, drop(all(), n * @per_screen), [])
+
+  @doc "The label a grid cell shows: an app's manifest name, or a page's title."
+  @spec label(module) :: binary
+  def label(module) do
+    case Installed.name(module) do
+      nil -> module.title()
+      name -> name
+    end
+  end
 
   @doc "The shape keys, in button order."
   def keys, do: @keys
-
-  @doc "How many screens of six the grid needs."
-  def screens, do: @screens
-
-  @doc "One screen as `{key, module}` pairs, one per key, `nil` where the slot is empty."
-  def screen(n), do: pair(@keys, drop(@pages, n * @per_screen), [])
 
   @doc "The page a shape key opens from anywhere, or nil when the slot is unassigned."
   def for_key(key), do: for_key(key, 0)
