@@ -17,7 +17,10 @@ defmodule Badge.Store.JobTest do
   }
 
   test "without wifi the manifest job reports offline" do
-    assert Job.run(:manifest) == {:manifest, {:error, :offline}}
+    log = capture_io(fn -> send(self(), Job.run(:manifest)) end)
+
+    assert_received {:manifest, {:error, :offline}}
+    assert log =~ "Store: manifest failed: offline"
   end
 
   test "without wifi a pack job reports offline" do

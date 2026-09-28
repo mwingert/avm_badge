@@ -35,7 +35,9 @@ defmodule Badge.Store.Job do
       :io.format(~c"Store: manifest lists ~p apps~n", [length(entries)])
       {:manifest, {:ok, entries}}
     else
-      {:error, reason} -> {:manifest, {:error, reason}}
+      {:error, reason} ->
+        :io.format(~c"Store: manifest failed: ~p~n", [reason])
+        {:manifest, {:error, reason}}
     end
   end
 
