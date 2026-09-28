@@ -39,20 +39,20 @@ defmodule Badge.Store.Job do
     end
   end
 
-  def run({:pack, entry}) do
+  def run({:pack, %{id: id, version: version} = entry}) do
     with :ok <- online(),
          {:ok, url} <- Store.url(base(), Store.pack_path(entry)),
          {:ok, pack} <- Fetch.get(url, Store.max_pack()),
          :ok <- Store.verify(entry, pack),
          :ok <-
            :atomvm.add_avm_pack_binary(pack,
-             name: :erlang.binary_to_atom("app_" <> entry.id, :utf8)
+             name: :erlang.binary_to_atom("app_" <> id, :utf8)
            ) do
-      :io.format(~c"Store: loaded ~s ~s~n", [entry.id, entry.version])
+      :io.format(~c"Store: loaded ~s ~s~n", [id, version])
       {:loaded, entry}
     else
       {:error, reason} ->
-        :io.format(~c"Store: ~s failed: ~p~n", [entry.id, reason])
+        :io.format(~c"Store: ~s failed: ~p~n", [id, reason])
         {:failed, entry, reason}
     end
   end

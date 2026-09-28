@@ -209,8 +209,8 @@ defmodule Badge.UI do
 
   # A page that is finished with the screen hands over by returning `{:goto, page}`.
   @impl true
-  def handle_info(:render_tick, state) do
-    case Guard.call(state.page, :tick, [state.page_state]) do
+  def handle_info(:render_tick, %{page: page, page_state: page_state} = state) do
+    case Guard.call(page, :tick, [page_state]) do
       {:ok, {:goto, page}} -> {:noreply, goto(state, page)}
       {:ok, page_state} -> {:noreply, ticked(state, page_state)}
       :crashed -> {:noreply, crashed(state)}
@@ -251,11 +251,10 @@ defmodule Badge.UI do
   end
 
   # Offers an event to the page on screen; a crash or an unexpected answer puts Home there instead.
-  defp offer(state, fun, args) do
-    case Guard.call(state.page, fun, args ++ [state.page_state]) do
+  defp offer(%{page: page, page_state: old, dirty: dirty} = state, fun, args) do
+    case Guard.call(page, fun, args ++ [old]) do
       {:ok, {:ok, page_state}} ->
-        {:took,
-         %{state | page_state: page_state, dirty: state.dirty or page_state != state.page_state}}
+        {:took, %{state | page_state: page_state, dirty: dirty or page_state != old}}
 
       {:ok, :ignore} ->
         :ignore
@@ -533,8 +532,8 @@ defmodule Badge.UI do
   # Re-entering the current page would reset it, and key repeat fires a held key 8 times a second.
   defp goto(%{page: page} = state, page), do: state
 
-  defp goto(state, page) do
-    Guard.call(state.page, :leave, [state.page_state])
+  defp goto(%{page: current, page_state: page_state} = state, page) do
+    Guard.call(current, :leave, [page_state])
     page = route(page)
     :io.format(~c"UI: page ~p~n", [page])
 
