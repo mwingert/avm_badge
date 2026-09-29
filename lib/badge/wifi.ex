@@ -27,6 +27,9 @@ defmodule Badge.Wifi do
 
   @sntp_host "pool.ntp.org"
 
+  # The ESP32-S3 driver's cap; AtomVM defaults to 6.
+  @scan_results 20
+
   @first_backoff 1_000
   @max_backoff 30_000
 
@@ -199,7 +202,7 @@ defmodule Badge.Wifi do
   def handle_cast(:scan, state) do
     started = ensure_started(state)
 
-    case :network.wifi_scan() do
+    case :network.wifi_scan(results: @scan_results) do
       :ok ->
         {:noreply, %{started | scanning: true}}
 
