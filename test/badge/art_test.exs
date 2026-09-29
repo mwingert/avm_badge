@@ -14,6 +14,14 @@ defmodule Badge.ArtTest do
       assert Art.tint(<<0, 128, 255>>, 0x102030) ==
                <<0x10, 0x20, 0x30, 0, 0x10, 0x20, 0x30, 128, 0x10, 0x20, 0x30, 255>>
     end
+
+    test "keeps every pixel in order across rows" do
+      {width, _height} = Art.share_size()
+      mask = :erlang.list_to_binary(for i <- 1..(width * 2 + 5), do: rem(i, 256))
+      expected = for <<alpha <- mask>>, into: <<>>, do: <<0x10, 0x20, 0x30, alpha>>
+
+      assert Art.tint(mask, 0x102030) == expected
+    end
   end
 
   describe "share/1" do

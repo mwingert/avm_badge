@@ -65,11 +65,17 @@ defmodule Badge.Art do
     g = div(rem(tint, 0x10000), 0x100)
     b = rem(tint, 0x100)
 
-    tint(mask, r, g, b, <<>>)
+    rows(mask, r, g, b, [])
   end
 
-  defp tint(<<alpha, rest::binary>>, r, g, b, acc),
-    do: tint(rest, r, g, b, <<acc::binary, r, g, b, alpha>>)
+  defp rows(<<row::binary-size(@width), rest::binary>>, r, g, b, acc) when rest != <<>>,
+    do: rows(rest, r, g, b, [row(row, r, g, b, <<>>) | acc])
 
-  defp tint(<<>>, _r, _g, _b, acc), do: acc
+  defp rows(last, r, g, b, acc),
+    do: :erlang.iolist_to_binary(:lists.reverse([row(last, r, g, b, <<>>) | acc]))
+
+  defp row(<<alpha, rest::binary>>, r, g, b, acc),
+    do: row(rest, r, g, b, <<acc::binary, r, g, b, alpha>>)
+
+  defp row(<<>>, _r, _g, _b, acc), do: acc
 end
