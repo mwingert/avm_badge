@@ -140,7 +140,7 @@ listens on `0.0.0.0:4000`.
 
 Pages can be installed without a cable from signed packs in
 [mwingert/avm_badge_apps](https://github.com/mwingert/avm_badge_apps), through
-the Store page. [doc/app-store.md](doc/app-store.md) covers creating,
+the Store page. [docs/app-store.md](docs/app-store.md) covers creating,
 building, publishing, browsing and installing apps.
 
 ## Flash layout
