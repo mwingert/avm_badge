@@ -16,6 +16,7 @@ badge.
     --wifi-psk    BADGE_WIFI_PSK      prompted for, hidden, when a network is named
     --utc-offset  BADGE_UTC_OFFSET    minutes, -720..840; a fallback for time_zone
     --chat-url    AVM_BADGE_SERVER_URL
+    --store-url   BADGE_STORE_URL     app store base URL; the firmware defaults to the public store
 
 `--forget-wifi` drops the saved network, keeping everything else.
 
@@ -53,6 +54,7 @@ SETTINGS = [
     ("wifi_psk", "--wifi-psk", "BADGE_WIFI_PSK"),
     ("chat_url", "--chat-url", "AVM_BADGE_SERVER_URL"),
     ("utc_offset_m", "--utc-offset", "BADGE_UTC_OFFSET"),
+    ("store_url", "--store-url", "BADGE_STORE_URL"),
 ]
 
 WIFI = ("wifi_ssid", "wifi_psk")
