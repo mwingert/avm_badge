@@ -175,6 +175,17 @@ defmodule Badge.StoreTest do
                {:error, :storage}
     end
 
+    test "accepts every api from the first to the firmware's own", %{pub: pub, priv: priv} do
+      pack = :crypto.strong_rand_bytes(200)
+
+      for api <- Store.min_api()..Store.api() do
+        assert Store.verify(signed(pack, priv, %{api: api}), pack, pub) == :ok
+      end
+
+      assert Store.verify(signed(pack, priv, %{api: Store.min_api() - 1}), pack, pub) ==
+               {:error, :api}
+    end
+
     test "rejects everything without a key", %{priv: priv} do
       pack = :crypto.strong_rand_bytes(200)
       assert Store.verify(signed(pack, priv), pack, nil) == {:error, :signature}
@@ -217,8 +228,13 @@ defmodule Badge.StoreTest do
       assert Store.installable(entry(%{size: 10}), installed) == {:no, :full}
     end
 
+    test "an app built for an older api installs" do
+      assert Store.installable(entry(%{api: Store.min_api()}), []) == :ok
+    end
+
     test "another api or flash storage cannot install" do
       assert Store.installable(entry(%{api: Store.api() + 1}), []) == {:no, :api}
+      assert Store.installable(entry(%{api: Store.min_api() - 1}), []) == {:no, :api}
       assert Store.installable(entry(%{storage: "flash"}), []) == {:no, :storage}
     end
   end

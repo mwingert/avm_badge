@@ -316,9 +316,19 @@ defmodule Badge.UI do
   def drowse(%{asleep: true, napping: true} = state), do: state
 
   def drowse(state) do
-    case Guard.call(state.page, :awake?, [state.page_state]) do
+    case page_awake(state.page, state.page_state) do
       {:ok, awake} -> drift(state, drowsing(state.asleep, awake == true))
       :crashed -> state |> crashed() |> pace()
+    end
+  end
+
+  @doc false
+  # An app built before api 2 has no awake?/1, and lets the screen sleep.
+  @spec page_awake(module, term) :: {:ok, term} | :crashed
+  def page_awake(page, page_state) do
+    case :erlang.function_exported(page, :awake?, 1) do
+      true -> Guard.call(page, :awake?, [page_state])
+      false -> {:ok, false}
     end
   end
 

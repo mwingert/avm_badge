@@ -56,6 +56,28 @@ defmodule Badge.UITest do
     end
   end
 
+  # An app from api 1: every callback it had then, but no awake?/1.
+  defmodule OldApp do
+    def title, do: "Old"
+    def init, do: :state
+    def render(_state), do: []
+    def leave(_state), do: :ok
+  end
+
+  describe "an app built before awake?/1" do
+    test "lets the screen sleep, without counting as a crash" do
+      {awake, log} = ExUnit.CaptureIO.with_io(fn -> Badge.UI.page_awake(OldApp, :state) end)
+
+      assert awake == {:ok, false}
+      assert log == ""
+    end
+
+    test "while a page that has it still decides, and a crash in it is still a crash" do
+      assert Badge.UI.page_awake(Badge.Page.Home, Badge.Page.Home.init()) == {:ok, false}
+      assert capture_crash(fn -> Badge.UI.page_awake(Restless, nil) end) == :crashed
+    end
+  end
+
   defp capture_crash(fun) do
     {result, log} = ExUnit.CaptureIO.with_io(fun)
     assert log =~ "crashed"
