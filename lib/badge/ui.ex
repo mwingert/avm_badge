@@ -14,7 +14,9 @@ defmodule Badge.UI do
 
   Each page sets its own frame rate through `refresh/0`. `tick/1` still
   runs on every base tick regardless, so a page that smooths its readings
-  keeps averaging at full rate while repainting slowly.
+  keeps averaging at full rate while repainting slowly. A page asking for
+  frames faster than 100 ms makes the ticker run at 50 ms while it is on
+  screen.
 
   After the sleep timeout the panel and the LED chain go dark and no frame is
   drawn, though pages keep ticking so nothing resets behind the blank screen.
@@ -60,8 +62,11 @@ defmodule Badge.UI do
   # Ticker rate. A page renders at its own `refresh/0`, which must be a multiple of this.
   @base_interval 100
 
+  # The rate for a page that asks to refresh faster than the base.
+  @fast_interval 50
+
   # The clock in the title bar needs a second; battery and wifi change far more slowly.
-  @status_ticks div(1_000, @base_interval)
+  @status_ms 1_000
 
   @font_dogica File.read!("assets/fonts/dogica.uf")
   @font_pixel_operator File.read!("assets/fonts/pixel_operator.uf")
@@ -134,7 +139,9 @@ defmodule Badge.UI do
       missing: [],
       idle: 0,
       asleep: false,
-      napping: false
+      napping: false,
+      interval: @base_interval,
+      ticker: nil
     }
 
     Skin.activate(Skin.load())
@@ -142,9 +149,7 @@ defmodule Badge.UI do
     # Renders once immediately so the home grid is up before the first tick.
     state = render(state)
 
-    start_ticker()
-
-    {:ok, state}
+    {:ok, pace(%{state | ticker: start_ticker(@base_interval)})}
   end
 
   @impl true
@@ -249,18 +254,39 @@ defmodule Badge.UI do
         dirty: dirty
     }
 
-    next = drowse(next)
+    next = next |> pace() |> drowse()
 
     # Nothing is visible while asleep, and a repaint is the costliest thing here.
     case not next.asleep and dirty and next.countdown <= 0 do
       true ->
         drawn = render(sync_fonts(next))
 
-        %{drawn | dirty: false, countdown: reload(drawn.page, drawn.page_state)}
+        %{drawn | dirty: false, countdown: reload(drawn)}
 
       false ->
         %{next | countdown: max(next.countdown - 1, 0)}
     end
+  end
+
+  @doc false
+  # The ticker interval for a page refreshing every `refresh` ms.
+  @spec interval(pos_integer) :: pos_integer
+  def interval(refresh) when refresh < @base_interval, do: @fast_interval
+  def interval(_refresh), do: @base_interval
+
+  # Retimes the ticker when the page on screen wants a different rate.
+  defp pace(state) do
+    case Guard.call(state.page, :refresh, [state.page_state]) do
+      {:ok, ms} -> retime(state, interval(ms))
+      :crashed -> pace(crashed(state))
+    end
+  end
+
+  defp retime(%{interval: interval} = state, interval), do: state
+
+  defp retime(state, interval) do
+    send(state.ticker, {:interval, interval})
+    %{state | interval: interval}
   end
 
   defp first_page do
@@ -285,7 +311,7 @@ defmodule Badge.UI do
   defp drowse(%{asleep: true} = state) do
     idle = state.idle + 1
 
-    case idle >= Sleep.ticks(@base_interval) and Sleep.allowed?(holds()) do
+    case idle >= Sleep.ticks(state.interval) and Sleep.allowed?(holds()) do
       true -> nap(state)
       false -> %{state | idle: idle}
     end
@@ -293,12 +319,16 @@ defmodule Badge.UI do
 
   # A badge set never to sleep counts on without ever reaching the timeout.
   defp drowse(state) do
-    idle = state.idle + 1
+    idle = if awake?(state), do: 0, else: state.idle + 1
 
-    case Backlight.sleep_ticks(Backlight.settings().sleep, @base_interval) do
+    case Backlight.sleep_ticks(Backlight.settings().sleep, state.interval) do
       ticks when is_integer(ticks) and idle >= ticks -> sleep(state)
       _awake -> %{state | idle: idle}
     end
+  end
+
+  defp awake?(%{page: page, page_state: page_state}) do
+    Guard.call(page, :awake?, [page_state]) == {:ok, true}
   end
 
   defp sleep(state) do
@@ -373,9 +403,9 @@ defmodule Badge.UI do
     _, _ -> nil
   end
 
-  defp reload(page, page_state) do
-    case Guard.call(page, :refresh, [page_state]) do
-      {:ok, ms} -> max(div(ms, @base_interval), 1) - 1
+  defp reload(state) do
+    case Guard.call(state.page, :refresh, [state.page_state]) do
+      {:ok, ms} -> max(div(ms, state.interval), 1) - 1
       :crashed -> 0
     end
   end
@@ -383,7 +413,7 @@ defmodule Badge.UI do
   # Retries next tick while a source is down, rather than calling a process that is not there.
   defp refresh_status(%{status_countdown: 0} = state) do
     case sources_up?() do
-      true -> {read_status(), @status_ticks - 1}
+      true -> {read_status(), div(@status_ms, state.interval) - 1}
       false -> {state.status, 0}
     end
   end
@@ -450,7 +480,7 @@ defmodule Badge.UI do
 
     case Guard.call(page, :init, []) do
       {:ok, page_state} ->
-        %{state | page: page, page_state: page_state, dirty: true, countdown: 0}
+        pace(%{state | page: page, page_state: page_state, dirty: true, countdown: 0})
 
       :crashed ->
         crashed(state)
@@ -473,14 +503,18 @@ defmodule Badge.UI do
   end
 
   # Waits in a linked process, so this GenServer never sleeps in a callback and a dead ticker crashes loudly.
-  defp start_ticker do
+  defp start_ticker(interval) do
     ui = self()
-    spawn_link(fn -> tick_loop(ui) end)
+    spawn_link(fn -> tick_loop(ui, interval) end)
   end
 
-  defp tick_loop(ui) do
-    Process.sleep(@base_interval)
-    send(ui, :render_tick)
-    tick_loop(ui)
+  defp tick_loop(ui, interval) do
+    receive do
+      {:interval, next} -> tick_loop(ui, next)
+    after
+      interval ->
+        send(ui, :render_tick)
+        tick_loop(ui, interval)
+    end
   end
 end
