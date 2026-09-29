@@ -65,7 +65,8 @@ exact version it installed again after every reboot.
 
 `api` is `Badge.Store.api/0` from the firmware. It goes up when a firmware
 function that apps call changes, and a badge installs only apps built for its
-own `api`.
+own `api`. API 2 added `Badge.Page.awake?/1`, the 50 ms tick for a
+page whose `refresh/1` is under 100 ms, and `Badge.Keyboard.watch/1`.
 
 ## Publishing
 

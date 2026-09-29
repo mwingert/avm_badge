@@ -10,7 +10,7 @@ defmodule Badge.Store do
   over `signed_message/2`. Nothing here touches the network or NVS.
   """
 
-  @api 1
+  @api 2
   @budget 262_144
   @max_pack 65_536
   @max_apps 12

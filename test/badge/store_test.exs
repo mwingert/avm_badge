@@ -79,7 +79,7 @@ defmodule Badge.StoreTest do
   end
 
   test "the signed message is one field a line" do
-    assert Store.signed_message(entry(), "abc") == "demo\n1.0.0\n1\nram\nabc"
+    assert Store.signed_message(entry(), "abc") == "demo\n1.0.0\n2\nram\nabc"
   end
 
   describe "decode_manifest/1" do
