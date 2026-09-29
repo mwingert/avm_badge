@@ -197,11 +197,17 @@ defmodule Badge.UI do
   # A page that is finished with the screen hands over by returning `{:goto, page}`.
   @impl true
   def handle_info(:render_tick, %{page: page, page_state: page_state} = state) do
-    case Guard.call(page, :tick, [page_state]) do
-      {:ok, {:goto, page}} -> {:noreply, goto(state, page)}
-      {:ok, page_state} -> {:noreply, ticked(state, page_state)}
-      :crashed -> {:noreply, crashed(state)}
-    end
+    next =
+      case Guard.call(page, :tick, [page_state]) do
+        {:ok, {:goto, page}} -> goto(state, page)
+        {:ok, page_state} -> ticked(state, page_state)
+        :crashed -> crashed(state)
+      end
+
+    # The ticker holds the next tick until this one is handled.
+    send(next.ticker, :ticked)
+
+    {:noreply, next}
   end
 
   # The IR link delivers here because this process owns the mailbox; only the
@@ -257,7 +263,7 @@ defmodule Badge.UI do
     next = next |> pace() |> drowse()
 
     # Nothing is visible while asleep, and a repaint is the costliest thing here.
-    case not next.asleep and dirty and next.countdown <= 0 do
+    case not next.asleep and next.dirty and next.countdown <= 0 do
       true ->
         drawn = render(sync_fonts(next))
 
@@ -308,7 +314,25 @@ defmodule Badge.UI do
   # Screen off: count on towards the CPU sleep, unless one is already requested.
   defp drowse(%{asleep: true, napping: true} = state), do: state
 
-  defp drowse(%{asleep: true} = state) do
+  defp drowse(state) do
+    case drowsing(state.asleep, awake?(state)) do
+      :wake -> wake(state)
+      :stay -> %{state | idle: 0}
+      :nap -> toward_nap(state)
+      :sleep -> toward_sleep(state)
+    end
+  end
+
+  @doc false
+  # A tick's step: a page that must stay awake lights the screen, otherwise idle counts on.
+  @spec drowsing(boolean, boolean) :: :wake | :stay | :nap | :sleep
+  def drowsing(asleep, awake)
+  def drowsing(true, true), do: :wake
+  def drowsing(true, false), do: :nap
+  def drowsing(false, true), do: :stay
+  def drowsing(false, false), do: :sleep
+
+  defp toward_nap(state) do
     idle = state.idle + 1
 
     case idle >= Sleep.ticks(state.interval) and Sleep.allowed?(holds()) do
@@ -318,8 +342,8 @@ defmodule Badge.UI do
   end
 
   # A badge set never to sleep counts on without ever reaching the timeout.
-  defp drowse(state) do
-    idle = if awake?(state), do: 0, else: state.idle + 1
+  defp toward_sleep(state) do
+    idle = state.idle + 1
 
     case Backlight.sleep_ticks(Backlight.settings().sleep, state.interval) do
       ticks when is_integer(ticks) and idle >= ticks -> sleep(state)
@@ -508,13 +532,22 @@ defmodule Badge.UI do
     spawn_link(fn -> tick_loop(ui, interval) end)
   end
 
-  defp tick_loop(ui, interval) do
+  @doc false
+  def tick_loop(ui, interval) do
     receive do
       {:interval, next} -> tick_loop(ui, next)
     after
       interval ->
         send(ui, :render_tick)
-        tick_loop(ui, interval)
+        await_tick(ui, interval)
+    end
+  end
+
+  # Sleeps again only once the UI has handled the tick, so ticks never queue up.
+  defp await_tick(ui, interval) do
+    receive do
+      :ticked -> tick_loop(ui, interval)
+      {:interval, next} -> await_tick(ui, next)
     end
   end
 end

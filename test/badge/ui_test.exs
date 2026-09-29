@@ -27,4 +27,45 @@ defmodule Badge.UITest do
       assert Badge.UI.interval(20) == 50
     end
   end
+
+  describe "a tick while drowsing" do
+    test "lights a dark screen for a page that must stay awake" do
+      assert Badge.UI.drowsing(true, true) == :wake
+    end
+
+    test "keeps a lit screen on without counting" do
+      assert Badge.UI.drowsing(false, true) == :stay
+    end
+
+    test "counts on towards the timeout otherwise" do
+      assert Badge.UI.drowsing(false, false) == :sleep
+      assert Badge.UI.drowsing(true, false) == :nap
+    end
+  end
+
+  describe "the ticker" do
+    test "holds the next tick until the last one is handled" do
+      me = self()
+      ticker = spawn_link(fn -> Badge.UI.tick_loop(me, 20) end)
+
+      assert_receive :render_tick, 200
+      refute_receive :render_tick, 150
+
+      send(ticker, :ticked)
+      assert_receive :render_tick, 200
+    end
+
+    test "takes a new interval while it waits" do
+      me = self()
+      ticker = spawn_link(fn -> Badge.UI.tick_loop(me, 1_000) end)
+
+      send(ticker, {:interval, 20})
+      assert_receive :render_tick, 200
+
+      send(ticker, {:interval, 30})
+      refute_receive :render_tick, 100
+      send(ticker, :ticked)
+      assert_receive :render_tick, 200
+    end
+  end
 end
