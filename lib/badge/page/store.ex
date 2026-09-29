@@ -31,6 +31,7 @@ defmodule Badge.Page.Store do
   @hint_y Theme.height() - 20
   @notice_y Theme.height() - 44
   @columns 38
+  @retry 10_000
 
   @impl true
   def title, do: "Store"
@@ -89,7 +90,15 @@ defmodule Badge.Page.Store do
     end
   end
 
+  # A failed manifest is fetched again once its retry time has passed.
   @impl true
+  def tick(%{want: nil, job: nil, manifest: {:error, _reason, at}} = state) do
+    case :erlang.monotonic_time(:millisecond) >= at do
+      true -> start(state, :manifest)
+      false -> state
+    end
+  end
+
   def tick(%{want: nil} = state), do: state
   def tick(%{want: :manifest} = state), do: start(state, :manifest)
   def tick(%{want: {:pack, entry}} = state), do: start(state, {:pack, entry})
@@ -131,7 +140,8 @@ defmodule Badge.Page.Store do
   def finished(state, {:manifest, {:ok, entries}}),
     do: %{state | entries: entries, manifest: :ready}
 
-  def finished(state, {:manifest, {:error, reason}}), do: %{state | manifest: {:error, reason}}
+  def finished(state, {:manifest, {:error, reason}}),
+    do: %{state | manifest: {:error, reason, :erlang.monotonic_time(:millisecond) + @retry}}
 
   def finished(%{opening: id} = state, {:loaded, %{id: id} = entry}),
     do: %{state | want: {:open, entry}}
@@ -245,8 +255,11 @@ defmodule Badge.Page.Store do
       Nav.hint([{"Enter", "details"}], @hint_y, Theme.dim())
   end
 
-  defp list_status(%{manifest: {:error, _reason}}, _rows),
-    do: [centred("Store offline", @notice_y - 20, Theme.accent())]
+  defp list_status(%{manifest: {:error, :offline, _at}}, _rows),
+    do: [centred("Waiting for wifi and clock", @notice_y - 20, Theme.accent())]
+
+  defp list_status(%{manifest: {:error, reason, _at}}, _rows),
+    do: [centred("Store offline: " <> reason_text(reason), @notice_y - 20, Theme.accent())]
 
   defp list_status(%{manifest: :loading}, []), do: [centred("Loading...", 100, Theme.dim())]
   defp list_status(_state, _rows), do: []
