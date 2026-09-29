@@ -201,7 +201,7 @@ defmodule Badge.UI do
       case Guard.call(page, :tick, [page_state]) do
         {:ok, {:goto, page}} -> goto(state, page)
         {:ok, page_state} -> ticked(state, page_state)
-        :crashed -> crashed(state)
+        :crashed -> state |> crashed() |> pace()
       end
 
     # The ticker holds the next tick until this one is handled.
@@ -312,16 +312,20 @@ defmodule Badge.UI do
   end
 
   # Screen off: count on towards the CPU sleep, unless one is already requested.
-  defp drowse(%{asleep: true, napping: true} = state), do: state
+  @doc false
+  def drowse(%{asleep: true, napping: true} = state), do: state
 
-  defp drowse(state) do
-    case drowsing(state.asleep, awake?(state)) do
-      :wake -> wake(state)
-      :stay -> %{state | idle: 0}
-      :nap -> toward_nap(state)
-      :sleep -> toward_sleep(state)
+  def drowse(state) do
+    case Guard.call(state.page, :awake?, [state.page_state]) do
+      {:ok, awake} -> drift(state, drowsing(state.asleep, awake == true))
+      :crashed -> state |> crashed() |> pace()
     end
   end
+
+  defp drift(state, :wake), do: wake(state)
+  defp drift(state, :stay), do: %{state | idle: 0}
+  defp drift(state, :nap), do: toward_nap(state)
+  defp drift(state, :sleep), do: toward_sleep(state)
 
   @doc false
   # A tick's step: a page that must stay awake lights the screen, otherwise idle counts on.
@@ -349,10 +353,6 @@ defmodule Badge.UI do
       ticks when is_integer(ticks) and idle >= ticks -> sleep(state)
       _awake -> %{state | idle: idle}
     end
-  end
-
-  defp awake?(%{page: page, page_state: page_state}) do
-    Guard.call(page, :awake?, [page_state]) == {:ok, true}
   end
 
   defp sleep(state) do

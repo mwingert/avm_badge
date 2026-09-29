@@ -16,6 +16,52 @@ defmodule Badge.UITest do
     assert state.dirty
   end
 
+  defmodule Restless do
+    def tick(_state), do: raise("boom")
+    def awake?(_state), do: raise("boom")
+    def leave(_state), do: :ok
+  end
+
+  describe "a page that crashes" do
+    setup do
+      %{
+        state: %{
+          page: Restless,
+          page_state: nil,
+          asleep: false,
+          napping: false,
+          dirty: false,
+          countdown: 3,
+          interval: 50,
+          ticker: self()
+        }
+      }
+    end
+
+    test "in awake? is replaced by Home at the base interval", %{state: state} do
+      state = capture_crash(fn -> Badge.UI.drowse(state) end)
+
+      assert state.page == Badge.Page.Home
+      assert state.interval == 100
+      assert_received {:interval, 100}
+    end
+
+    test "in tick is replaced by Home at the base interval", %{state: state} do
+      {:noreply, state} = capture_crash(fn -> Badge.UI.handle_info(:render_tick, state) end)
+
+      assert state.page == Badge.Page.Home
+      assert state.interval == 100
+      assert_received {:interval, 100}
+      assert_received :ticked
+    end
+  end
+
+  defp capture_crash(fun) do
+    {result, log} = ExUnit.CaptureIO.with_io(fun)
+    assert log =~ "crashed"
+    result
+  end
+
   describe "the tick interval" do
     test "is the base 100 ms for a page that refreshes no faster" do
       assert Badge.UI.interval(100) == 100
