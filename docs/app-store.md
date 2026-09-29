@@ -138,7 +138,8 @@ In the details, Enter installs:
 
 | Problem | What happens |
 |---|---|
-| No wifi, no clock, GitHub unreachable | "Store offline"; installed apps still listed |
+| No wifi or no clock yet | "Waiting for wifi and clock"; fetched again every 10 s |
+| GitHub unreachable or an HTTP error | "Store offline: <reason>"; fetched again every 10 s |
 | Download fails, or runs over 60 s | "Failed: <reason>"; nothing saved |
 | Wrong size, hash or signature | Pack discarded and logged; nothing loaded or saved |
 | Leaving the Store page mid-download | The download is stopped; nothing recorded |

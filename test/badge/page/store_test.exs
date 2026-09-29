@@ -157,9 +157,20 @@ defmodule Badge.Page.StoreTest do
     end
   end
 
-  test "a failed manifest shows the store offline" do
-    state = Page.finished(%{Page.init() | want: nil}, {:manifest, {:error, :offline}})
-    assert "Store offline" in texts(state)
+  test "a failed manifest says why" do
+    offline = Page.finished(%{Page.init() | want: nil}, {:manifest, {:error, :offline}})
+    assert "Waiting for wifi and clock" in texts(offline)
+
+    missing = Page.finished(%{Page.init() | want: nil}, {:manifest, {:error, {:status, 404}}})
+    assert "Store offline: HTTP 404" in texts(missing)
+  end
+
+  test "a failed manifest is fetched again ten seconds later" do
+    failed = Page.finished(%{Page.init() | want: nil}, {:manifest, {:error, :offline}})
+    assert Page.tick(failed) == failed
+
+    due = %{failed | manifest: {:error, :offline, :erlang.monotonic_time(:millisecond) - 1}}
+    assert {_ref, _pid} = Page.tick(due).job
   end
 
   test "a finished install is recorded on the next tick" do
