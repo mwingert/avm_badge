@@ -83,7 +83,7 @@ defmodule Badge.Page.ShareTest do
       for state <- [Page.init(), loaded(), loaded(%{})] do
         assert Enum.any?(
                  Page.render(state),
-                 &match?({:image, 88, 90, _bg, {:rgba8888, 144, 64, _pixels}}, &1)
+                 &match?({:text, 88, 90, :icons64, _fg, _bg, _glyph}, &1)
                )
       end
     end
@@ -377,7 +377,7 @@ defmodule Badge.Page.ShareTest do
     defp with_peers(n), do: collected(for i <- 1..n, do: peer(i, "Badge #{i}"))
 
     defp images(state),
-      do: for({:image, _x, _y, _bg, _img} = item <- Page.render(state), do: item)
+      do: for({:text, _x, _y, :icons16, _fg, _bg, _glyph} = item <- Page.render(state), do: item)
 
     test "a name with no icons beside it is shown whole" do
       assert "Bartholomew Cubbins the Third" in texts(
