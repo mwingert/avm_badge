@@ -64,8 +64,12 @@ bytes, the task stops. Bump `version` instead, because a badge downloads the
 exact version it installed again after every reboot.
 
 `api` is `Badge.Store.api/0` from the firmware. It goes up when a firmware
-function that apps call changes, and a badge installs only apps built for its
-own `api`.
+function that apps call changes. A badge installs apps built for any `api`
+from `Badge.Store.min_api/0` up to its own, so an older app keeps working;
+raise `min_api` only when the firmware drops something older apps rely on.
+API 2 added `Badge.Page.awake?/1`, the 50 ms tick for a page whose
+`refresh/1` is under 100 ms, and `Badge.Keyboard.watch/1`. An api 1 app has no
+`awake?/1`, and the badge treats that as `false`.
 
 ## Publishing
 
@@ -91,7 +95,7 @@ The Store page is on the second home screen, under the diamond key
    - its size when it can install;
    - `installed`;
    - `update` when the store has another version;
-   - `newer fw` when it needs another `api` or flash storage;
+   - `newer fw` when it needs a newer `api` or flash storage;
    - `no room` when it does not fit.
 
    The footer shows the free budget. Installed apps the store no longer lists
@@ -106,9 +110,9 @@ which a conference shares, does not apply.
 
 In the details, Enter installs:
 
-1. `Badge.Store.installable/2` checks the `api` and `storage`, that at most
-   12 apps are installed, and that the pack fits the 256K budget. For an
-   update only the size difference counts.
+1. `Badge.Store.installable/2` checks that the `api` is supported, that the
+   `storage` is `ram`, that at most 12 apps are installed, and that the pack
+   fits the 256K budget. For an update only the size difference counts.
 2. A job downloads `packs/<id>-<version>.avm`.
 3. `Badge.Store.verify/2` checks the size, the SHA-256, the `api`, the
    `storage` and the signature against `assets/store_key.pub`, which is

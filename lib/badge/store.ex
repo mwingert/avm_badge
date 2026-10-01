@@ -7,10 +7,12 @@ defmodule Badge.Store do
   `size`, `storage` (`"ram"` or `"flash"`), `api`, `sha256` (hex) and `sig`
   (base64 DER). A pack is genuine when its size and SHA-256 match the entry
   and `sig` is an ECDSA P-256 signature, by the key in `assets/store_key.pub`,
-  over `signed_message/2`. Nothing here touches the network or NVS.
+  over `signed_message/2`. Apps built for any api from `min_api/0` up to
+  `api/0` install. Nothing here touches the network or NVS.
   """
 
-  @api 1
+  @api 2
+  @min_api 1
   @budget 262_144
   @max_pack 65_536
   @max_apps 12
@@ -25,6 +27,9 @@ defmodule Badge.Store do
 
   @doc "The firmware API apps are built against; bumped when a function apps may call changes."
   def api, do: @api
+
+  @doc "The oldest api an app may be built against and still install."
+  def min_api, do: @min_api
 
   @doc "Bytes of PSRAM installed `ram` apps may take together."
   def budget, do: @budget
@@ -169,12 +174,14 @@ defmodule Badge.Store do
     cond do
       byte_size(pack) != size -> {:error, :size}
       sha != sha256 -> {:error, :sha256}
-      api != @api -> {:error, :api}
+      not supported?(api) -> {:error, :api}
       storage != "ram" -> {:error, :storage}
       not signed?(entry, sha, key) -> {:error, :signature}
       true -> :ok
     end
   end
+
+  defp supported?(api), do: is_integer(api) and api >= @min_api and api <= @api
 
   defp signed?(_entry, _sha, nil), do: false
 
@@ -202,7 +209,7 @@ defmodule Badge.Store do
     current = find(installed, id)
 
     cond do
-      api != @api -> {:no, :api}
+      not supported?(api) -> {:no, :api}
       storage != "ram" -> {:no, :storage}
       current != nil and version_of(current) == version -> :installed
       current == nil and length(installed) >= @max_apps -> {:no, :full}

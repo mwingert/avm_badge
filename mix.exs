@@ -24,7 +24,13 @@ defmodule Badge.MixProject do
       aliases: [
         "atomvm.application_bin": &application_bin/1,
         "atomvm.packbeam": ["atomvm.application_bin", "atomvm.packbeam"],
-        "atomvm.esp32.flash": ["atomvm.application_bin", "atomvm.esp32.flash"]
+        "atomvm.esp32.flash": [
+          "atomvm.application_bin",
+          "atomvm.packbeam",
+          "badge.fits",
+          "atomvm.esp32.flash"
+        ],
+        "badge.fits": &fits/1
       ],
       atomvm: [
         start: Badge,
@@ -71,15 +77,30 @@ defmodule Badge.MixProject do
     Mix.shell().info("priv/application.bin: #{app} #{config[:version]}")
   end
 
+  # One packbeam slot, 656K (0xA4000).
+  @avm "avm_badge.avm"
+  @slot 671_744
+
+  defp fits(_args) do
+    case File.stat(@avm) do
+      {:ok, %{size: size}} when size <= @slot ->
+        Mix.shell().info("badge.fits: #{size}B of #{@slot}B")
+
+      {:ok, %{size: size}} ->
+        Mix.raise("badge.fits: #{size}B of #{@slot}B, does not fit the packbeam slot")
+
+      {:error, _reason} ->
+        Mix.raise("badge.fits: no #{@avm}; run mix atomvm.packbeam")
+    end
+  end
+
   defp test_paths(:badge), do: ["test"]
   defp test_paths(_target), do: ["test", "sim/test"]
 
   defp deps do
     [
       {:exatomvm,
-       github: "atomvm/ExAtomVM",
-       ref: "ff7daf7e83a4e86fbf078730b6c49045a99de9f8",
-       runtime: false},
+       github: "atomvm/ExAtomVM", ref: "ff7daf7e83a4e86fbf078730b6c49045a99de9f8", runtime: false},
       # The Erlang side of the port driver built into the VM. A rebar3
       # project, so mix is told which manager to use.
       {:atomvm_websocket_client,

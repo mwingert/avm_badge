@@ -139,6 +139,28 @@ defmodule Badge.Keyboard do
     GenServer.call(__MODULE__, {:holding?, label})
   end
 
+  @doc """
+  Sends `{:held, labels}` to `pid` whenever the set of held keys changes,
+  until `unwatch/0`. One watcher at a time; a new one replaces the last.
+  """
+  @spec watch(pid) :: :ok
+  def watch(pid), do: GenServer.cast(__MODULE__, {:watch, pid})
+
+  @doc "Stops telling anyone what is held."
+  @spec unwatch() :: :ok
+  def unwatch, do: GenServer.cast(__MODULE__, {:watch, nil})
+
+  @doc false
+  # Tells a watcher about a change in the held set; silent when nothing changed.
+  @spec notify(pid | nil, [charlist], [charlist]) :: :ok
+  def notify(nil, _held, _labels), do: :ok
+  def notify(_watcher, held, held), do: :ok
+
+  def notify(watcher, _held, labels) do
+    send(watcher, {:held, labels})
+    :ok
+  end
+
   @doc "Stops the CPU on the next scan until a key is pressed, unless one is held."
   @spec light_sleep() :: :ok
   def light_sleep, do: GenServer.cast(__MODULE__, :light_sleep)
@@ -150,6 +172,7 @@ defmodule Badge.Keyboard do
 
   @impl true
   def handle_cast(:light_sleep, state), do: {:noreply, %{state | sleep: true}}
+  def handle_cast({:watch, pid}, state), do: {:noreply, %{state | watcher: pid}}
 
   @impl true
   def init(:ok) do
@@ -162,7 +185,8 @@ defmodule Badge.Keyboard do
 
     send(self(), :scan)
 
-    {:ok, %{candidate: [], count: 0, held: [], repeat: KeyRepeat.new(), sleep: false}}
+    {:ok,
+     %{candidate: [], count: 0, held: [], repeat: KeyRepeat.new(), sleep: false, watcher: nil}}
   end
 
   @impl true
@@ -439,6 +463,7 @@ defmodule Badge.Keyboard do
         end
       end)
 
+    notify(state.watcher, state.held, labels)
     %{state | held: labels, repeat: repeat}
   end
 
