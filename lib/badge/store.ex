@@ -6,7 +6,7 @@ defmodule Badge.Store do
   An entry is a map with `id`, `category`, `name`, `author`, `description`, `version`,
   `size`, `storage` (`"ram"` or `"flash"`), `api`, `sha256` (hex) and `sig`
   (base64 DER). A pack is genuine when its size and SHA-256 match the entry
-  and `sig` is an ECDSA P-256 signature, by the key in `assets/store_key.pub`,
+  and `sig` is an ECDSA P-256 signature, by the key from `key/1`,
   over `signed_message/2`. Nothing here touches the network or NVS.
   """
 
@@ -227,6 +227,12 @@ defmodule Badge.Store do
   def base(nil), do: @default_base
   def base(""), do: @default_base
   def base(url), do: url
+
+  @doc "The signer's public key: the provisioned `store_key`, or the compiled one."
+  @spec key(binary | nil) :: binary | nil
+  def key(nil), do: @public_key
+  def key(""), do: @public_key
+  def key(key), do: key
 
   @doc "`path` under `base`, split for `:ahttp_client`."
   @spec url(binary, binary) ::

@@ -53,7 +53,7 @@ defmodule Badge.Store.Job do
     with :ok <- online(),
          {:ok, url} <- Store.url(base(), Store.pack_path(entry)),
          {:ok, pack} <- Fetch.get(url, Store.max_pack()),
-         :ok <- Store.verify(entry, pack),
+         :ok <- Store.verify(entry, pack, key()),
          :ok <-
            :atomvm.add_avm_pack_binary(pack,
              name: :erlang.binary_to_atom("app_" <> id, :utf8)
@@ -103,5 +103,11 @@ defmodule Badge.Store.Job do
     Store.base(Nvs.get(:store_url))
   catch
     _kind, _reason -> Store.base(nil)
+  end
+
+  defp key do
+    Store.key(Nvs.get(:store_key))
+  catch
+    _kind, _reason -> Store.key(nil)
   end
 end

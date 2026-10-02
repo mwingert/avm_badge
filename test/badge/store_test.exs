@@ -223,6 +223,18 @@ defmodule Badge.StoreTest do
     end
   end
 
+  describe "key/1" do
+    test "falls back to the compiled key" do
+      assert Store.key(nil) == File.read!(Path.expand("../../assets/store_key.pub", __DIR__))
+      assert Store.key("") == Store.key(nil)
+    end
+
+    test "a provisioned key verifies its own signer's packs" do
+      {pub, _priv} = :crypto.generate_key(:ecdh, :secp256r1)
+      assert Store.key(pub) == pub
+    end
+  end
+
   describe "urls" do
     test "the base falls back to the public store" do
       assert Store.base(nil) == "https://raw.githubusercontent.com/mwingert/avm_badge_apps/main/"

@@ -111,8 +111,9 @@ In the details, Enter installs:
    update only the size difference counts.
 2. A job downloads `packs/<id>-<version>.avm`.
 3. `Badge.Store.verify/2` checks the size, the SHA-256, the `api`, the
-   `storage` and the signature against `assets/store_key.pub`, which is
-   compiled into the firmware. A pack that fails is discarded; nothing is
+   `storage` and the signature against the store key: the NVS `store_key`
+   if provisioned, otherwise `assets/store_key.pub`, compiled into the
+   firmware. A pack that fails is discarded; nothing is
    loaded or saved.
 4. `:atomvm.add_avm_pack_binary/2` loads the pack into PSRAM, after the
    firmware's own code, so it can never replace a firmware module.
@@ -160,3 +161,18 @@ The NVS key `store_url` overrides the default base,
 `https://raw.githubusercontent.com/mwingert/avm_badge_apps/main/`. Give the
 full base ending in `/`. An `http://` base works for a store served from a
 laptop on the bench; the signature keeps it safe.
+
+A store signed by someone else also needs their public key in NVS
+`store_key`. The key never comes from the store itself: whoever can push to
+the store could then swap key and packs together.
+
+    BADGE_STORE_URL=https://raw.githubusercontent.com/<you>/<fork>/main/ \
+    BADGE_STORE_PUB=path/to/store_key.pub \
+    python3 tools/provision.py
+
+Back to the public store: provision the default URL and
+`assets/store_key.pub` the same way. Installed apps signed by another key
+fail their next download with `:signature`.
+
+A fork that only mirrors the public store's signed packs needs `store_url`
+alone.
